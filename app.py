@@ -1,9 +1,3 @@
-"""
-Beijing Air Quality Predictor — Backend FastAPI
-Entrena los modelos al iniciar si no existen, o carga los guardados.
-Ejecutar: uvicorn app:app --reload --port 8000
-"""
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -14,14 +8,12 @@ import joblib
 import os
 from pathlib import Path
 
-# ── Modelos ──────────────────────────────────────────────────────────────────
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 
 
-# ── Rutas de modelos ──────────────────────────────────────────────────────────
 MODEL_DIR   = Path(__file__).parent / "models"
 MODEL_DIR.mkdir(exist_ok=True)
 
@@ -29,16 +21,11 @@ LR_PATH     = MODEL_DIR / "lr_model.pkl"
 TREE_PATH   = MODEL_DIR / "tree_model.pkl"
 SCALER_PATH = MODEL_DIR / "scaler.pkl"
 
-# Predictores que usa el modelo (sin PM2.5 para evitar data leakage)
 PREDICTORS = ["PM10", "SO2", "NO2", "CO", "O3", "TEMP"]
 
 
 def train_and_save():
-    """
-    Entrena los modelos con datos sintéticos representativos del dataset de Beijing.
-    Reemplaza esto con tu df_knn y df_clean reales si ya los tienes exportados.
-    """
-    print("⚙️  Entrenando modelos (primera vez)...")
+    print("Entrenando modelos (primera vez)...")
 
     import kagglehub, glob
     path = kagglehub.dataset_download('sid321axn/beijing-multisite-airquality-data-set')
@@ -97,18 +84,16 @@ def load_models():
 
 lr_model, tree_model, scaler = load_models()
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(title="Beijing Air Quality API", version="1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # En producción limita a tu dominio
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ── Schemas ───────────────────────────────────────────────────────────────────
 class PredictRequest(BaseModel):
     PM10:  float
     SO2:   float
@@ -116,7 +101,6 @@ class PredictRequest(BaseModel):
     CO:    float
     O3:    float
     TEMP:  float
-    # Extras informativos (no entran al modelo)
     PM25:  float = 0.0
     PRES:  float = 1013.0
     DEWP:  float = 0.0
@@ -137,7 +121,6 @@ class PredictResponse(BaseModel):
     danger:           bool
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
     return {"status": "ok", "models": ["LogisticRegression", "DecisionTreeClassifier"]}
@@ -147,19 +130,15 @@ def health():
 def predict(req: PredictRequest):
     features = [[req.PM10, req.SO2, req.NO2, req.CO, req.O3, req.TEMP]]
 
-    # Logistic Regression (requiere escalado)
     features_sc = scaler.transform(features)
     pred_lr    = int(lr_model.predict(features_sc)[0])
     proba_lr   = float(lr_model.predict_proba(features_sc)[0][1])
 
-    # Decision Tree
     pred_tree  = int(tree_model.predict(features)[0])
     proba_tree = float(tree_model.predict_proba(features)[0][1])
 
-    # Risk score combinado (promedio ponderado: 40% LR, 60% Tree)
     risk_score = round(0.4 * proba_lr + 0.6 * proba_tree, 4)
 
-    # AQI estimado simple
     aqi = int(req.PM25 * 0.89 + req.PM10 * 0.08 + req.NO2 * 0.03)
 
     danger = risk_score >= 0.5 or req.PM25 >= 150
@@ -183,6 +162,5 @@ def predict(req: PredictRequest):
     )
 
 
-# Servir el frontend estático desde /static
 if Path("static").exists():
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
