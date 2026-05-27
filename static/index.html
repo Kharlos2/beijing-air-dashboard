@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beijing Air Quality Predictor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --card:      #1c2330;
+      --border:    rgba(255,255,255,0.08);
+      --border2:   rgba(255,255,255,0.15);
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --hint:      #484f58;
+      --blue:      #388bfd;
+      --blue-dim:  rgba(56,139,253,0.15);
+      --green:     #3fb950;
+      --green-dim: rgba(63,185,80,0.15);
+      --amber:     #d29922;
+      --amber-dim: rgba(210,153,34,0.15);
+      --red:       #f85149;
+      --red-dim:   rgba(248,81,73,0.15);
+      --radius:    10px;
+      --radius-lg: 14px;
+      --mono:      'IBM Plex Mono', monospace;
+      --sans:      'Space Grotesk', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    /* Header */
+    .header { margin-bottom: 2rem; }
+    .header-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--blue-dim); border: 1px solid var(--blue);
+      border-radius: 20px; padding: 3px 12px;
+      font-size: 11px; color: var(--blue); margin-bottom: 12px; letter-spacing: 0.04em;
+    }
+    .header h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+    .header p  { color: var(--muted); font-size: 13px; margin-top: 6px; }
+
+    /* Metric cards */
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+    .metric {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+    }
+    .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    .metric-val   { font-size: 26px; font-weight: 600; font-family: var(--mono); color: var(--text); }
+    .metric-sub   { font-size: 11px; color: var(--hint); margin-top: 3px; }
+
+    /* Main grid */
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 1.5rem; }
+    .panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 1.25rem 1.5rem;
+    }
+    .panel-title {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 1.2rem; display: flex; align-items: center; gap: 6px;
+    }
+    .panel-title svg { opacity: .6; }
+
+    /* Sliders */
+    .slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .slider-lbl { font-size: 12px; color: var(--muted); width: 58px; flex-shrink: 0; }
+    .slider-row input[type=range] {
+      flex: 1; height: 4px; appearance: none; background: var(--border2);
+      border-radius: 2px; outline: none; cursor: pointer;
+    }
+    .slider-row input[type=range]::-webkit-slider-thumb {
+      appearance: none; width: 14px; height: 14px;
+      background: var(--blue); border-radius: 50%; cursor: pointer;
+    }
+    .slider-val { font-size: 12px; font-family: var(--mono); color: var(--text); width: 56px; text-align: right; flex-shrink: 0; }
+    .unit-tag {
+      font-size: 9px; color: var(--hint); display: block; margin-top: 1px;
+    }
+
+    /* Select */
+    select {
+      background: var(--surface); border: 1px solid var(--border2);
+      color: var(--text); border-radius: var(--radius); padding: 6px 10px;
+      font-size: 12px; font-family: var(--sans); width: 100%; margin-bottom: 10px; cursor: pointer;
+    }
+    .sel-row { display: flex; gap: 10px; }
+    .sel-row > div { flex: 1; }
+    .sel-lbl { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+
+    /* Risk bar */
+    .risk-wrap { margin-bottom: 1.5rem; }
+    .risk-header { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .risk-track { height: 6px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+    .risk-fill   { height: 100%; border-radius: 3px; transition: width .4s ease, background .4s ease; }
+
+    /* Result box */
+    .result-box {
+      border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
+      transition: border-color .3s, background .3s;
+    }
+    .result-box.safe   { border-color: var(--green); background: var(--green-dim); }
+    .result-box.danger { border-color: var(--red);   background: var(--red-dim);   }
+    .result-box.warn   { border-color: var(--amber); background: var(--amber-dim); }
+    .result-box.idle   { background: var(--card); }
+    .result-status { font-size: 15px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .result-text { font-size: 13px; color: var(--muted); line-height: 1.7; }
+    .model-badges { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .badge {
+      font-size: 11px; font-family: var(--mono); padding: 3px 10px;
+      border-radius: 20px; border: 1px solid var(--border2); color: var(--muted);
+    }
+    .badge.active { border-color: var(--green); color: var(--green); }
+    .badge.active-r { border-color: var(--red); color: var(--red); }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .btn {
+      background: transparent; border: 1px solid var(--border2);
+      color: var(--text); border-radius: var(--radius); padding: 8px 16px;
+      font-size: 13px; font-family: var(--sans); cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .btn:hover { background: rgba(255,255,255,.06); border-color: var(--blue); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600;
+    }
+    .btn-primary:hover { background: #1f6feb; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* Chart */
+    .chart-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+    .chart-wrap  { position: relative; height: 220px; }
+
+    /* API config bar */
+    .api-bar {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 14px;
+    }
+    .api-bar label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .api-bar input {
+      flex: 1; background: var(--card); border: 1px solid var(--border2);
+      color: var(--text); border-radius: 6px; padding: 5px 10px; font-size: 12px; font-family: var(--mono);
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hint); flex-shrink: 0; transition: background .3s; }
+    .status-dot.ok { background: var(--green); }
+    .status-dot.err { background: var(--red); }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.2); border-top-color: #fff;
+      border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive */
+    @media (max-width: 720px) {
+      .grid2 { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 420px) {
+      .metrics { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-badge">
+      <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="currentColor"/></svg>
+      LIVE PREDICTOR · BEIJING AIR QUALITY
+    </div>
+    <h1>Beijing Air Quality<br>Predictor Dashboard</h1>
+    <p>Modelos: Regresión Logística + Árbol de Decisión · Dataset 2013–2017 · 12 estaciones de monitoreo</p>
+  </div>
+
+  <!-- API config -->
+  <div class="api-bar">
+    <span class="status-dot" id="api-dot"></span>
+    <label>API URL</label>
+    <input type="text" id="api-url" value="http://localhost:8000" placeholder="https://tu-app.onrender.com">
+    <button class="btn btn-sm" onclick="checkHealth()">Verificar</button>
+    <span id="api-status" style="font-size:11px;color:var(--muted)">Sin verificar</span>
+  </div>
+
+  <!-- Metric cards -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">PM2.5 actual</div>
+      <div class="metric-val" id="m-pm25">85</div>
+      <div class="metric-sub">µg/m³</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Riesgo combinado</div>
+      <div class="metric-val" id="m-risk">—</div>
+      <div class="metric-sub">score modelo</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">AQI estimado</div>
+      <div class="metric-val" id="m-aqi">—</div>
+      <div class="metric-sub">índice</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Umbral EPA</div>
+      <div class="metric-val" style="color:var(--amber)">150</div>
+      <div class="metric-sub">µg/m³ PM2.5</div>
+    </div>
+  </div>
+
+  <!-- Sliders grid -->
+  <div class="grid2">
+    <!-- Contaminantes -->
+    <div class="panel">
+      <div class="panel-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg>
+        Contaminantes
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">PM2.5<span class="unit-tag">µg/m³</span></span>
+        <input type="range" id="sl-pm25" min="0" max="500" step="1" value="85">
+        <span class="slider-val" id="lv-pm25">85</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">PM10<span class="unit-tag">µg/m³</span></span>
+        <input type="range" id="sl-pm10" min="0" max="600" step="1" value="120">
+        <span class="slider-val" id="lv-pm10">120</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">SO₂<span class="unit-tag">µg/m³</span></span>
+        <input type="range" id="sl-so2" min="0" max="200" step="1" value="20">
+        <span class="slider-val" id="lv-so2">20</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">NO₂<span class="unit-tag">µg/m³</span></span>
+        <input type="range" id="sl-no2" min="0" max="250" step="1" value="55">
+        <span class="slider-val" id="lv-no2">55</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">CO<span class="unit-tag">µg/m³</span></span>
+        <input type="range" id="sl-co" min="0" max="10000" step="50" value="1200">
+        <span class="slider-val" id="lv-co">1200</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">O₃<span class="unit-tag">µg/m³</span></span>
+        <input type="range" id="sl-o3" min="0" max="300" step="1" value="60">
+        <span class="slider-val" id="lv-o3">60</span>
+      </div>
+    </div>
+
+    <!-- Meteorología -->
+    <div class="panel">
+      <div class="panel-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+        Meteorología
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">Temp<span class="unit-tag">°C</span></span>
+        <input type="range" id="sl-temp" min="-20" max="42" step="1" value="12">
+        <span class="slider-val" id="lv-temp">12</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">Presión<span class="unit-tag">hPa</span></span>
+        <input type="range" id="sl-pres" min="990" max="1040" step="1" value="1013">
+        <span class="slider-val" id="lv-pres">1013</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">Rocío<span class="unit-tag">°C</span></span>
+        <input type="range" id="sl-dewp" min="-40" max="30" step="1" value="-2">
+        <span class="slider-val" id="lv-dewp">-2</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">Lluvia<span class="unit-tag">mm</span></span>
+        <input type="range" id="sl-rain" min="0" max="72" step="0.5" value="0">
+        <span class="slider-val" id="lv-rain">0.0</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-lbl">Viento<span class="unit-tag">m/s</span></span>
+        <input type="range" id="sl-wspm" min="0" max="15" step="0.1" value="1.5">
+        <span class="slider-val" id="lv-wspm">1.5</span>
+      </div>
+      <div class="sel-row" style="margin-top:14px;">
+        <div>
+          <div class="sel-lbl">Estación</div>
+          <select id="sel-station">
+            <option>Aotizhongxin</option><option>Changping</option><option>Dingling</option>
+            <option>Dongsi</option><option>Guanyuan</option><option>Gucheng</option>
+            <option>Huairou</option><option>Nongzhanguan</option><option>Shunyi</option>
+            <option>Tiantan</option><option>Wanliu</option><option>Wanshouxigong</option>
+          </select>
+        </div>
+        <div>
+          <div class="sel-lbl">Mes</div>
+          <select id="sel-month">
+            <option value="1">Enero</option><option value="2">Febrero</option>
+            <option value="3">Marzo</option><option value="4">Abril</option>
+            <option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option>
+            <option value="9">Septiembre</option><option value="10">Octubre</option>
+            <option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risk bar -->
+  <div class="risk-wrap">
+    <div class="risk-header">
+      <span>Puntuación de riesgo estimada (lógica árbol de decisión)</span>
+      <span id="risk-pct">—</span>
+    </div>
+    <div class="risk-track"><div class="risk-fill" id="risk-fill" style="width:0%;background:var(--green)"></div></div>
+  </div>
+
+  <!-- Result box -->
+  <div class="result-box idle" id="result-box">
+    <div class="result-status" id="result-status" style="color:var(--muted)">
+      Ajusta los parámetros y presiona "Predecir"
+    </div>
+    <div class="result-text" id="result-text">
+      El modelo evaluará PM10, SO₂, NO₂, CO, O₃ y temperatura para determinar la probabilidad de que el aire sea peligroso (PM2.5 ≥ 150 µg/m³ según clasificación EPA).
+    </div>
+    <div class="model-badges" id="model-badges" style="display:none;">
+      <span class="badge" id="badge-lr">LR: —</span>
+      <span class="badge" id="badge-tree">Tree: —</span>
+      <span class="badge" id="badge-risk">Risk: —</span>
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btn-predict" onclick="predict()">Predecir</button>
+    <button class="btn" onclick="setScenario('clean')">Aire limpio</button>
+    <button class="btn" onclick="setScenario('moderate')">Contaminación moderada</button>
+    <button class="btn" onclick="setScenario('severe')">Episodio severo</button>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-panel">
+    <div class="panel-title">Contaminantes vs umbrales EPA</div>
+    <div class="chart-wrap">
+      <canvas id="barChart" role="img" aria-label="Gráfico de barras comparando contaminantes actuales con umbrales EPA"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const EPA = { PM25: 150, PM10: 250, SO2: 75, NO2: 100, CO: 4000, O3: 160 };
+
+const slCfg = [
+  {id:'pm25', dec: 0}, {id:'pm10', dec: 0}, {id:'so2', dec: 0},
+  {id:'no2',  dec: 0}, {id:'co',   dec: 0}, {id:'o3', dec: 0},
+  {id:'temp', dec: 0}, {id:'pres', dec: 0}, {id:'dewp', dec: 0},
+  {id:'rain', dec: 1}, {id:'wspm', dec: 1}
+];
+
+function g(id) { return parseFloat(document.getElementById('sl-' + id)?.value ?? 0); }
+
+slCfg.forEach(({id, dec}) => {
+  const el = document.getElementById('sl-' + id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    document.getElementById('lv-' + id).textContent = v.toFixed(dec);
+    if (id === 'pm25') document.getElementById('m-pm25').textContent = Math.round(v);
+    updateRiskBar();
+    updateChart();
+  });
+});
+
+// Chart
+const barChart = new Chart(document.getElementById('barChart'), {
+  type: 'bar',
+  data: {
+    labels: ['PM2.5', 'PM10', 'SO₂', 'NO₂', 'CO ÷ 50', 'O₃'],
+    datasets: [
+      {
+        label: 'Valor actual',
+        data: [85, 120, 20, 55, 24, 60],
+        backgroundColor: 'rgba(56,139,253,0.7)',
+        borderColor: '#388bfd',
+        borderWidth: 1,
+      },
+      {
+        label: 'Umbral EPA',
+        data: [150, 250, 75, 100, 80, 160],
+        backgroundColor: 'rgba(248,81,73,0.25)',
+        borderColor: '#f85149',
+        borderWidth: 1,
+        borderDash: [4, 4],
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,.06)' } },
+      y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,.06)' }, beginAtZero: true }
+    }
+  }
+});
+
+function updateChart() {
+  barChart.data.datasets[0].data = [g('pm25'), g('pm10'), g('so2'), g('no2'), g('co')/50, g('o3')];
+  barChart.update('none');
+}
+
+function updateRiskBar() {
+  const pm25 = g('pm25'), pm10 = g('pm10'), co = g('co'), no2 = g('no2');
+  const temp = g('temp'), wspm = g('wspm');
+  let s = 0;
+  s += pm25 >= 150 ? 50 : pm25 >= 75 ? 25 : pm25 / 150 * 15;
+  s += pm10 >= 250 ? 15 : pm10 / 250 * 10;
+  s += co   >= 4000 ? 15 : co / 4000 * 10;
+  s += no2  >= 100 ? 10 : no2 / 100 * 7;
+  if (temp < 5) s += 5;
+  if (wspm < 1) s += 5;
+  s = Math.min(100, Math.round(s));
+
+  const fill = document.getElementById('risk-fill');
+  fill.style.width = s + '%';
+  fill.style.background = s >= 60 ? 'var(--red)' : s >= 30 ? 'var(--amber)' : 'var(--green)';
+  document.getElementById('risk-pct').textContent = s + '%';
+
+  const aqi = Math.round(g('pm25') * 0.89 + g('pm10') * 0.08 + g('no2') * 0.03);
+  document.getElementById('m-risk').textContent = (s / 100).toFixed(2);
+  document.getElementById('m-aqi').textContent = aqi;
+}
+
+updateRiskBar();
+
+// Health check
+async function checkHealth() {
+  const url = document.getElementById('api-url').value.replace(/\/$/, '');
+  const dot = document.getElementById('api-dot');
+  const st  = document.getElementById('api-status');
+  try {
+    const r = await fetch(url + '/health');
+    const d = await r.json();
+    dot.className = 'status-dot ok';
+    st.textContent = '✓ ' + JSON.stringify(d.models);
+    st.style.color = 'var(--green)';
+  } catch {
+    dot.className = 'status-dot err';
+    st.textContent = '✗ No se pudo conectar';
+    st.style.color = 'var(--red)';
+  }
+}
+
+// Predict
+async function predict() {
+  const btn = document.getElementById('btn-predict');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Consultando modelo...';
+
+  const box    = document.getElementById('result-box');
+  const status = document.getElementById('result-status');
+  const text   = document.getElementById('result-text');
+  const badges = document.getElementById('model-badges');
+
+  box.className = 'result-box idle';
+  status.textContent = 'Analizando...';
+  status.style.color = 'var(--muted)';
+  badges.style.display = 'none';
+  text.textContent = '';
+
+  const url = document.getElementById('api-url').value.replace(/\/$/, '');
+  const body = {
+    PM10: g('pm10'), SO2: g('so2'), NO2: g('no2'),
+    CO: g('co'), O3: g('o3'), TEMP: g('temp'),
+    PM25: g('pm25'), PRES: g('pres'), DEWP: g('dewp'),
+    RAIN: g('rain'), WSPM: g('wspm'),
+    station: document.getElementById('sel-station').value,
+    month: parseInt(document.getElementById('sel-month').value)
+  };
+
+  try {
+    const r = await fetch(url + '/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+
+    box.className = 'result-box ' + (d.danger ? 'danger' : d.risk_score >= 0.35 ? 'warn' : 'safe');
+    const icon = d.danger ? '⚠️' : d.risk_score >= 0.35 ? '⚡' : '✓';
+    status.innerHTML = icon + ' ' + d.label;
+    status.style.color = d.danger ? 'var(--red)' : d.risk_score >= 0.35 ? 'var(--amber)' : 'var(--green)';
+    text.textContent = `Regresión Logística: ${(d.proba_lr * 100).toFixed(1)}% de probabilidad de peligrosidad. ` +
+                       `Árbol de Decisión: ${(d.proba_tree * 100).toFixed(1)}%. ` +
+                       `Score combinado: ${(d.risk_score * 100).toFixed(1)}%. ` +
+                       `AQI estimado: ${d.aqi_estimated}.`;
+
+    document.getElementById('m-risk').textContent = d.risk_score.toFixed(2);
+    document.getElementById('m-aqi').textContent = d.aqi_estimated;
+
+    badges.style.display = 'flex';
+    const blr  = document.getElementById('badge-lr');
+    const btree = document.getElementById('badge-tree');
+    const brisk = document.getElementById('badge-risk');
+    blr.textContent   = 'LR: ' + (d.prediction_lr   ? 'peligroso' : 'aceptable');
+    btree.textContent = 'Tree: ' + (d.prediction_tree ? 'peligroso' : 'aceptable');
+    brisk.textContent = 'Risk: ' + (d.risk_score * 100).toFixed(0) + '%';
+    blr.className   = 'badge ' + (d.prediction_lr   ? 'active-r' : 'active');
+    btree.className = 'badge ' + (d.prediction_tree ? 'active-r' : 'active');
+    brisk.className = 'badge ' + (d.risk_score >= 0.5 ? 'active-r' : 'active');
+
+    const fill = document.getElementById('risk-fill');
+    fill.style.width = (d.risk_score * 100) + '%';
+    fill.style.background = d.danger ? 'var(--red)' : d.risk_score >= 0.35 ? 'var(--amber)' : 'var(--green)';
+    document.getElementById('risk-pct').textContent = (d.risk_score * 100).toFixed(0) + '%';
+
+  } catch (err) {
+    box.className = 'result-box';
+    status.textContent = '✗ Error: ' + err.message;
+    status.style.color = 'var(--red)';
+    text.textContent = 'Verifica que el backend esté corriendo en la URL indicada arriba.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Predecir';
+}
+
+function setScenario(type) {
+  const s = {
+    clean:    { pm25:18, pm10:35, so2:5,  no2:20, co:400,  o3:40,  temp:22, pres:1015, dewp:8,   rain:2,   wspm:4   },
+    moderate: { pm25:90, pm10:150,so2:30, no2:70, co:2000, o3:80,  temp:8,  pres:1008, dewp:-5,  rain:0,   wspm:1.2 },
+    severe:   { pm25:280,pm10:400,so2:90, no2:160,co:7000, o3:40,  temp:-3, pres:1022, dewp:-12, rain:0,   wspm:0.3 }
+  }[type];
+  Object.entries(s).forEach(([k, v]) => {
+    const el = document.getElementById('sl-' + k);
+    const lv = document.getElementById('lv-' + k);
+    if (el) { el.value = v; if (lv) lv.textContent = parseFloat(v).toFixed(k==='rain'||k==='wspm'?1:0); }
+  });
+  document.getElementById('m-pm25').textContent = s.pm25;
+  updateRiskBar();
+  updateChart();
+}
+</script>
+</body>
+</html>
