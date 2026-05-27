@@ -1,131 +1,153 @@
-# Beijing Air Quality Predictor — Guía de Deploy
+# Beijing Air Quality Predictor
 
-## Estructura del proyecto
+Dashboard interactivo para predecir la calidad del aire en Beijing usando Regresión Logística y Árbol de Decisión, entrenados con el dataset multiestación 2013–2017 (420,768 registros, 12 estaciones de monitoreo).
+
+---
+
+## Descripción del proyecto
+
+El modelo predice si el aire es peligroso para la salud (PM2.5 >= 150 µg/m³) a partir de seis variables: PM10, SO2, NO2, CO, O3 y temperatura. Se entrenaron dos clasificadores con el pipeline completo del notebook original: imputación KNN, capping P1-P99, escalado con StandardScaler y split 80/20 estratificado.
+
+El backend expone una API REST en FastAPI. El frontend es un archivo HTML estático con sliders para cada variable, gráfico comparativo contra umbrales EPA y visualización del score combinado (40% Regresión Logística + 60% Árbol de Decisión).
+
+---
+
+## Estructura del repositorio
 
 ```
 beijing-air-dashboard/
-├── app.py              ← Backend FastAPI
+├── app.py                  Backend FastAPI
 ├── requirements.txt
-├── models/             ← Se genera automáticamente al primer arranque
-│   ├── lr_model.pkl
-│   ├── tree_model.pkl
-│   └── scaler.pkl
+├── .python-version         Fija Python 3.11.9 para el deploy
+├── vercel.json             Configuracion para Vercel (solo frontend)
+├── models/
+│   ├── lr_model.pkl        Regresion Logistica entrenada
+│   ├── tree_model.pkl      Arbol de Decision entrenado
+│   └── scaler.pkl          StandardScaler ajustado al conjunto de entrenamiento
 └── static/
-    └── index.html      ← Dashboard (se sirve desde FastAPI)
+    └── index.html          Dashboard (se sirve como archivo estatico)
 ```
 
 ---
 
-## Ejecutar localmente
+## Requisitos
+
+- Python 3.11
+- Las dependencias están en `requirements.txt`
+
+---
+
+## Ejecución local
 
 ```bash
-# 1. Crear entorno virtual
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# 2. Instalar dependencias
 pip install -r requirements.txt
-
-# 3. Arrancar
 uvicorn app:app --reload --port 8000
 ```
 
-Abre: http://localhost:8000
+Abrir en el navegador: `http://localhost:8000`
 
----
-
-## Usar tus modelos reales del notebook
-
-En `app.py`, reemplaza la función `train_and_save()` con:
-
-```python
-def train_and_save():
-    import kagglehub, glob
-    path = kagglehub.dataset_download('sid321axn/beijing-multisite-airquality-data-set')
-    archivos = glob.glob(os.path.join(path, '*.csv'))
-    df_raw = pd.concat([pd.read_csv(f) for f in archivos], ignore_index=True)
-
-    df = df_raw.copy()
-    df['aire_peligroso'] = (df['PM2.5'] >= 150).astype(int)
-
-    numeric_cols = ['PM2.5','PM10','SO2','NO2','CO','O3','TEMP','PRES','DEWP','RAIN','WSPM']
-    from sklearn.impute import KNNImputer
-    imp = KNNImputer(n_neighbors=5)
-    df[numeric_cols] = imp.fit_transform(df[numeric_cols])
-
-    # Capping P1-P99
-    for col in numeric_cols:
-        df[col] = df[col].clip(df[col].quantile(0.01), df[col].quantile(0.99))
-
-    X = df[PREDICTORS]
-    y = df['aire_peligroso']
-
-    from sklearn.model_selection import train_test_split
-    X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
-    scaler = StandardScaler()
-    X_train_sc = scaler.fit_transform(X_train)
-
-    lr = LogisticRegression(max_iter=1000, random_state=42)
-    lr.fit(X_train_sc, y_train)
-
-    tree = DecisionTreeClassifier(max_depth=6, random_state=42)
-    tree.fit(X_train, y_train)
-
-    joblib.dump(lr, LR_PATH)
-    joblib.dump(tree, TREE_PATH)
-    joblib.dump(scaler, SCALER_PATH)
-    return lr, tree, scaler
-```
-
-O si ya tienes los `.pkl` del notebook, simplemente cópialos en `./models/`.
-
----
-
-## Deploy en Render (recomendado, gratis)
-
-1. Sube el proyecto a GitHub
-2. Ve a https://render.com → New Web Service
-3. Conecta tu repo
-4. Configura:
-   - **Build command:** `pip install -r requirements.txt`
-   - **Start command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
-5. En el dashboard HTML, cambia la API URL a `https://tu-app.onrender.com`
-
----
-
-## Deploy en Railway
+Para verificar que la API responde:
 
 ```bash
-npm install -g @railway/cli
-railway login
-railway init
-railway up
+curl http://localhost:8000/health
+```
+
+Respuesta esperada:
+
+```json
+{"status": "ok", "models": ["LogisticRegression", "DecisionTreeClassifier"]}
 ```
 
 ---
 
-## Deploy en VPS (Ubuntu)
+## Endpoint de prediccion
 
-```bash
-# En el servidor
-git clone https://github.com/tu-user/beijing-air-dashboard
-cd beijing-air-dashboard
-pip install -r requirements.txt
+`POST /predict`
 
-# Instalar PM2 o usar systemd
-pip install gunicorn
-gunicorn app:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+Cuerpo de la peticion:
 
-# Con nginx como reverse proxy:
-# location / { proxy_pass http://127.0.0.1:8000; }
+```json
+{
+  "PM10": 120,
+  "SO2": 20,
+  "NO2": 55,
+  "CO": 1200,
+  "O3": 60,
+  "TEMP": 12,
+  "PM25": 85
+}
+```
+
+Respuesta:
+
+```json
+{
+  "prediction_lr": 0,
+  "prediction_tree": 0,
+  "proba_lr": 0.21,
+  "proba_tree": 0.18,
+  "risk_score": 0.194,
+  "aqi_estimated": 87,
+  "label": "Calidad del aire aceptable",
+  "danger": false
+}
 ```
 
 ---
 
-## CORS en producción
+## Actualizar los modelos
 
-Cambia en `app.py`:
+Si se reentrenan los modelos en el notebook, exportarlos con:
+
 ```python
-allow_origins=["https://tudominio.com"]
+import joblib
+
+joblib.dump(log_reg,      "models/lr_model.pkl")
+joblib.dump(tree_clf,     "models/tree_model.pkl")
+joblib.dump(scaler_model, "models/scaler.pkl")
 ```
+
+Luego hacer push al repositorio. Render redespliega automaticamente.
+
+---
+
+## Deploy en Render
+
+El proyecto esta desplegado en Render con auto-deploy activado desde la rama `main`.
+
+Configuracion del servicio:
+
+| Campo | Valor |
+|---|---|
+| Runtime | Python 3.11 |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn app:app --host 0.0.0.0 --port $PORT` |
+
+Cada `git push` a `main` dispara un nuevo deploy automaticamente.
+
+URL de produccion: `https://beijing-air-dashboard.onrender.com`
+
+---
+
+## Variables del modelo
+
+| Variable | Descripcion | Unidad | Rango dataset |
+|---|---|---|---|
+| PM10 | Material particulado grueso | µg/m³ | 0 – 600 |
+| SO2 | Dioxido de azufre | µg/m³ | 0 – 200 |
+| NO2 | Dioxido de nitrogeno | µg/m³ | 0 – 250 |
+| CO | Monoxido de carbono | µg/m³ | 0 – 10000 |
+| O3 | Ozono | µg/m³ | 0 – 300 |
+| TEMP | Temperatura | °C | -20 – 42 |
+
+Variable objetivo: `aire_peligroso` = 1 si PM2.5 >= 150 µg/m³, 0 en caso contrario.
+
+---
+
+## Fuente de datos
+
+Dataset: [Beijing Multi-Site Air Quality](https://www.kaggle.com/datasets/sid321axn/beijing-multisite-airquality-data-set)  
+Periodo: Marzo 2013 – Febrero 2017  
+Estaciones: Aotizhongxin, Changping, Dingling, Dongsi, Guanyuan, Gucheng, Huairou, Nongzhanguan, Shunyi, Tiantan, Wanliu, Wanshouxigong
