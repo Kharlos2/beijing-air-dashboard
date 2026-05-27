@@ -20,8 +20,6 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 
-MODEL_DIR = Path("models")
-MODEL_DIR.mkdir(exist_ok=True)
 
 LR_PATH   = MODEL_DIR / "lr_model.pkl"
 TREE_PATH = MODEL_DIR / "tree_model.pkl"
@@ -31,49 +29,49 @@ SCALER_PATH = MODEL_DIR / "scaler.pkl"
 PREDICTORS = ["PM10", "SO2", "NO2", "CO", "O3", "TEMP"]
 
 
-def train_and_save():
-    """
-    Entrena los modelos con datos sintéticos representativos del dataset de Beijing.
-    Reemplaza esto con tu df_knn y df_clean reales si ya los tienes exportados.
-    """
-    print("⚙️  Entrenando modelos (primera vez)...")
+# def train_and_save():
+#     """
+#     Entrena los modelos con datos sintéticos representativos del dataset de Beijing.
+#     Reemplaza esto con tu df_knn y df_clean reales si ya los tienes exportados.
+#     """
+#     print("⚙️  Entrenando modelos (primera vez)...")
 
-    import kagglehub, glob
-    path = kagglehub.dataset_download('sid321axn/beijing-multisite-airquality-data-set')
-    archivos = glob.glob(os.path.join(path, '*.csv'))
-    df_raw = pd.concat([pd.read_csv(f) for f in archivos], ignore_index=True)
+#     import kagglehub, glob
+#     path = kagglehub.dataset_download('sid321axn/beijing-multisite-airquality-data-set')
+#     archivos = glob.glob(os.path.join(path, '*.csv'))
+#     df_raw = pd.concat([pd.read_csv(f) for f in archivos], ignore_index=True)
 
-    df = df_raw.copy()
-    df['aire_peligroso'] = (df['PM2.5'] >= 150).astype(int)
+#     df = df_raw.copy()
+#     df['aire_peligroso'] = (df['PM2.5'] >= 150).astype(int)
 
-    numeric_cols = ['PM2.5','PM10','SO2','NO2','CO','O3','TEMP','PRES','DEWP','RAIN','WSPM']
-    from sklearn.impute import KNNImputer
-    imp = KNNImputer(n_neighbors=5)
-    df[numeric_cols] = imp.fit_transform(df[numeric_cols])
+#     numeric_cols = ['PM2.5','PM10','SO2','NO2','CO','O3','TEMP','PRES','DEWP','RAIN','WSPM']
+#     from sklearn.impute import KNNImputer
+#     imp = KNNImputer(n_neighbors=5)
+#     df[numeric_cols] = imp.fit_transform(df[numeric_cols])
 
-    # Capping P1-P99
-    for col in numeric_cols:
-        df[col] = df[col].clip(df[col].quantile(0.01), df[col].quantile(0.99))
+#     # Capping P1-P99
+#     for col in numeric_cols:
+#         df[col] = df[col].clip(df[col].quantile(0.01), df[col].quantile(0.99))
 
-    X = df[PREDICTORS]
-    y = df['aire_peligroso']
+#     X = df[PREDICTORS]
+#     y = df['aire_peligroso']
 
-    from sklearn.model_selection import train_test_split
-    X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+#     from sklearn.model_selection import train_test_split
+#     X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-    scaler = StandardScaler()
-    X_train_sc = scaler.fit_transform(X_train)
+#     scaler = StandardScaler()
+#     X_train_sc = scaler.fit_transform(X_train)
 
-    lr = LogisticRegression(max_iter=1000, random_state=42)
-    lr.fit(X_train_sc, y_train)
+#     lr = LogisticRegression(max_iter=1000, random_state=42)
+#     lr.fit(X_train_sc, y_train)
 
-    tree = DecisionTreeClassifier(max_depth=6, random_state=42)
-    tree.fit(X_train, y_train)
+#     tree = DecisionTreeClassifier(max_depth=6, random_state=42)
+#     tree.fit(X_train, y_train)
 
-    joblib.dump(lr, LR_PATH)
-    joblib.dump(tree, TREE_PATH)
-    joblib.dump(scaler, SCALER_PATH)
-    return lr, tree, scaler
+#     joblib.dump(lr, LR_PATH)
+#     joblib.dump(tree, TREE_PATH)
+#     joblib.dump(scaler, SCALER_PATH)
+#     return lr, tree, scaler
 
 
 def load_models():
